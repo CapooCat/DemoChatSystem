@@ -1,0 +1,322 @@
+<html>
+
+<head>
+    <title></title>
+    <script src="jquery-3.6.0.min.js"></script>
+    <script src="https://chat-system-demo.herokuapp.com/socket.io/socket.io.js"></script>
+    <script>
+        //kết nối lên server
+        var socket = io("https://chat-system-demo.herokuapp.com");
+        //var socket = io("http://localhost:3000");
+        var user = "";
+        var you = "";
+
+        //sự kiện khi click chọn user
+        function GetUser(data) {
+            if (user != data) {
+                user = data;
+                $('#context > tr').remove();
+                $(".user").removeClass("active");
+                $("#btn" + data).toggleClass("active");
+                $("#btn" + data).removeClass("notify");
+
+                socket.emit("get-user-history-chat", user);
+            }
+        }
+
+        //đẩy tin nhắn lên view
+        var KeepOn = false;
+        var NewMessage = false;
+        function LoadMessage(data) {
+            if($(".context-box").scrollTop() + $(".context-box").innerHeight() >= $(".context-box")[0].scrollHeight )
+                NewMessage = true;
+            if (you != "" && user != "") {
+                if (data.from == user) {
+                    if (!KeepOn) {
+                        $("#context").append('<tr><td class="Left"><span class="Name">' + data.from + '</span><div>' + data.mess + '</div></td><td class="Right" align="right"></td></tr>'); //tên và tin nhắn người gửi
+                        if(NewMessage) $(".context-box").animate({ scrollTop: 9999 }, 'slow');
+                        KeepOn = true;
+                    }
+                    else {
+                        $("#context").append('<tr><td class="Left"><div>' + data.mess + '</div></td><td class="Right" align="right"></td></tr>'); //tin nhắn người gửi
+                        if(NewMessage) $(".context-box").animate({ scrollTop: 9999 }, 'slow');
+                    }
+
+                }
+                else if (data.from == you) {
+                    KeepOn = false;
+                    $("#context").append('<tr><td class="Left"></td><td class="Right" align="right"><div>' + data.mess + '</div></td></div>'); //tin nhắn chính mình
+                    if(NewMessage) $(".context-box").animate({ scrollTop: 9999 }, 'slow');
+                } else {
+                    if(!$("#btn" + data.from).hasClass("notify"))
+                        $("#btn" + data.from).addClass("notify"); //thông báo tin nhắn mới
+                }
+            } else {
+                if(!$("#btn" + data.from).hasClass("notify"))
+                    $("#btn" + data.from).addClass("notify"); //thông báo tin nhắn mới
+            }
+            NewMessage = false;         
+        }
+
+        $(document).ready(function () {
+
+            $("#chat").hide();
+            $("#online").hide();
+
+            //đẩy tin nhắn lên server
+            $("#submit").click(function () {
+                if (user == "") {
+                    alert("vui lòng chọn user để chat");
+                } else {
+                    if ($("#input").val() != "") {
+                        let message = { mess: $("#input").val(), to: user } //mess: tin nhắn, to: người nhận tin nhắn
+                        socket.emit("client-send-data", message)
+                        $("#input").val("");
+                    }
+                }
+            });
+
+            //lịch sử chat nhận từ server
+            socket.on("history-chat", function (data) {
+                for (var x in data) {
+                    LoadMessage(data[x]);
+                }
+            });
+
+            //đăng ký user
+            $("#register").click(function () {
+                if ($("#username").val() != "") {
+                    socket.emit("client-register", $("#username").val())
+                }
+            });
+
+            //Server trả về đăng ký thành công và không thành công
+            socket.on("register-response", function (data) {
+                if (data) {
+                    $("#chat").show();
+                    $("#username").hide();
+                    $("#register").hide();
+                    you = $("#username").val();
+                    $("#you").append('Welcome, ' + you);
+                }
+            });
+
+            document.getElementById("input").addEventListener("keyup", function (event) {
+                // Number 13 is the "Enter" key on the keyboard
+                if (event.keyCode === 13) {
+                    // Cancel the default action, if needed
+                    event.preventDefault();
+                    // Trigger the button element with a click
+                    document.getElementById("submit").click();
+                }
+            });
+
+            //alert lỗi khi server trả về lỗi
+            socket.on("error", function (data) {
+                alert(data);
+            });
+            
+            //Nhận tin nhắn từ server
+            socket.on("server-send-data", function (data) {
+                LoadMessage(data);
+            });
+
+            //cập nhật danh sách users
+            socket.on("update-user", function (data) {
+                $("#online").hide();
+                $("a").remove(".user");
+                if (you != "") {
+                    data.forEach(function (item) {
+                        if (item != you) {
+                            $("#online").show();
+                            $("#online").append('<a id="btn' + item + '" class="user" href="javascript:GetUser(\'' + item + '\')">' + item + '</a>');
+                        }
+                    });
+
+                    if (user != "") {
+                        $(".user").removeClass("active");
+                        $("#btn" + user).toggleClass("active");
+                    }
+                }
+            });
+        })
+
+    </script>
+</head>
+<style>
+    input[type=text] {
+        width: calc(100% - 80px);
+        padding: 15px 20px;
+        border: none;
+        background-color: rgb(218, 218, 218);
+        border-radius: 10px 0px 0px 10px;
+    }
+
+    input[type=text]:focus {
+        outline: none;
+    }
+
+    button {
+        text-align: center;
+        width: 80px;
+        padding: 15px 20px;
+        border: none;
+        color: white;
+        background-color: green;
+        border-radius: 0px 10px 10px 0px;
+        cursor: pointer;
+        margin-bottom: 10px;
+    }
+
+    button:active {
+        background-color: rgb(0, 94, 0);
+    }
+
+    .Left {
+        width: 50%;
+        padding: 0;
+    }
+
+    .Left div {
+        text-align: left;
+        padding: 10px 15px;
+        border-radius: 10px;
+        background-color: white;
+        width: fit-content;
+        overflow-wrap: break-all;
+        margin-top: 5px;
+        margin-left: 5px;
+    }
+
+    .Right {
+        width: 50%;
+        padding: 0;
+
+    }
+
+    .Right div {
+        text-align: left;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 10px;
+        background-color: green;
+        width: fit-content;
+        overflow-wrap: break-all;
+        margin-top: 5px;
+        margin-right: 5px;
+    }
+
+    .context-box {
+        width: 100%;
+        height: 100%;
+        margin-bottom: 10px;
+        overflow-y: scroll;
+        overflow-x: hidden;
+        background-color: rgb(218, 218, 218);
+        border-radius: 10px;
+    }
+
+    .content-box table {
+        width: 100%;
+    }
+
+    .container {
+        width: 400px;
+        height: 450px;
+        float: left;
+    }
+
+    ::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: white;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: green;
+    }
+
+    #online {
+        width: 200px;
+        text-align: center;
+        background-color: rgb(218, 218, 218);
+        float: left;
+        margin: 0px 10px 10px 10px;
+        border-radius: 10px;
+    }
+
+    .title {
+        padding: 13px;
+        background-color: green;
+        border-radius: 10px 10px 0px 0px;
+        color: white;
+    }
+
+    .user {
+        display: block;
+        text-decoration: none;
+        padding: 5px;
+        margin: 10px;
+        color: white;
+        border-radius: 10px;
+        background-color: green;
+        position: relative;
+    }
+
+    .user::after {
+        content: "";
+        width: 6px;
+        height: 6px;
+        background-color: red;
+        position: absolute;
+        border-radius: 50%;
+        right: 0;
+        transform: translate(-100%, 50%);
+        visibility: hidden;
+    }
+
+    .notify::after {
+        visibility: visible !important;
+    }
+
+    .active {
+        background-color: white;
+        color: black;
+        pointer-events: none;
+    }
+
+    #you {
+        color: white;
+        text-align: center;
+        padding: 5px;
+        border-radius: 10px;
+        background-color: green;
+        margin-bottom: 10px;
+    }
+
+    .Name {
+        color: gray;
+        font-size: 13px;
+        margin-left: 10px;
+    }
+</style>
+
+<body>
+    <div class="container">
+        <input type="text" id="username"><button id="register">Go</button>
+        <div id="chat">
+            <div id="you"></div>
+            <div class="context-box">
+                <table id="context" width="100%"></table>
+            </div>
+            <input type="text" id="input"><button id="submit">Send</button>
+        </div>
+    </div>
+    <div id="online">
+        <div class="title">User online</div>
+    </div>
+</body>
+
+</html>
